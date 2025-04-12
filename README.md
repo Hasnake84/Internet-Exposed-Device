@@ -3,8 +3,6 @@
 ## Scenario:
 During routine maintenance, the security team is tasked with investigating any VMs in the shared services cluster (handling DNS, Domain Services, DHCP, etc.) that have mistakenly been exposed to the public internet. The goal is to identify any misconfigured VMs and check for potential brute-force login attempts/successes from external sources. Internal shared services device (e.g., a domain controller) is mistakenly exposed to the internet due to misconfiguration.
 
----
-
 ## Table:
 | **Parameter**       | **Description**                                                              |
 |---------------------|------------------------------------------------------------------------------|
@@ -12,40 +10,13 @@ During routine maintenance, the security team is tasked with investigating any V
 | **Info**| [Microsoft Defender Info](https://learn.microsoft.com/en-us/defender-xdr/advanced-hunting-deviceinfo-table)|
 | **Purpose**| The DeviceInfo table in the advanced hunting schema contains information about devices in the organization, including OS version, active users, and computer name.|
 
----
+### Device Discovery ###
+As part of the investigation, we discovered that a workstation identified as Windows-target-1 was unintentionally exposed to the public internet. Its external IP remained reachable for several days, potentially allowing unauthorized access attempts. This device is part of the shared services cluster and should not be accessible from outside the internal network.
+- Last Internet facing time: `2025-04-12T19:15:05.9710276Z`
 
-### **Timeline Overview**  
-1. **🔍 Archiving Activity:**  
-   - **Observed Behavior:**  Windows-target-1 has been internet-facing for several days, the public IPAddress was in the Logs. Last Internet facing time: `2025-01-06T19:15:05.9710276Z`
-  
-   - **Detection Query:**
-```kql
-DeviceFileEvents
-| top 20 by Timestamp desc
-```
-```kql
-DeviceNetworkEvents
-| top 20 by Timestamp desc
-```
-```kql
-DeviceProcessEvents
-| top 20 by Timestamp desc
-```
-```kql
-  DeviceInfo
-| where DeviceName == "windows-target-1" 
-| where IsInternetFacing == true
-| order by Timestamp desc
-```
+![image](https://github.com/user-attachments/assets/3820ca30-6ed0-466e-bb4b-69a786ae588a)
 
-## Sample Output:
-
-![Screenshot 2025-01-13 152413](https://github.com/user-attachments/assets/96ce0467-2bf1-4b83-94d3-5dac66c828c6)
-
----
-
-### Brute Force Attempts Detection
-
+### Brute Force Attempts Detected
 Several bad actors have been discovered attempting to log into the target machine.
 
 ```kql
@@ -57,71 +28,36 @@ DeviceLogonEvents
 | summarize Attempts = count() by ActionType, RemoteIP, DeviceName
 | order by Attempts
 ```
+![image](https://github.com/user-attachments/assets/52fa4a1d-fcfa-4155-bc0d-4e4d49429bcf)
 
-![Brute Force Attempt](https://github.com/user-attachments/assets/17ba8bdd-bd3b-4469-a374-15046cf45b1c)
-
----
-
-The top 5 most failed login attempt IP addresses have not been able to successfully break into VM.
+- The top 7 IP addresses with the highest number of failed login attempts were unsuccessful in gaining access to the VM.
 
 ```kql
-let RemoteIPsInQuestion = dynamic(["87.251.75.99","194.180.49.96", "194.180.48.11", "149.102.152.2", "141.98.11.191", "92.63.197.55", "185.7.214.87"]);
+let RemoteIPsInQuestion = dynamic(["92.255.85.172","185.42.12.59", "147.45.112.27", "196.251.84.131", "147.45.112.29", "88.214.25.73", "91.238.181.40"]);
 DeviceLogonEvents
 | where LogonType has_any("Network", "Interactive", "RemoteInteractive", "Unlock")
 | where ActionType == "LogonSuccess"
 | where RemoteIP has_any(RemoteIPsInQuestion)
 ```
+- No query results
 
-**<Query no results>**
+- All 10 successful remote or network logins for the 'labuser' account over the past 30 days were autorized and legitimate.
 
----
+![image](https://github.com/user-attachments/assets/68779b9c-efe3-4abe-a9f3-bf493d4b6061)
 
-The only successful remote/network logins in the last 30 days for 'labuser' account (57 total):
+- No failed logon attempts were recorded for the 'labuser' account, suggesting that no brute-force activity occurred. This also makes the possibility of a one-time successful password guess highly unlikely.
 
-```kql
-DeviceLogonEvents
-| where DeviceName == "windows-target-1"
-| where LogonType == "Network"
-| where ActionType == "LogonSuccess"
-| where AccountName == "labuser"
-| summarize count()
-```
+![image](https://github.com/user-attachments/assets/96d3f1b5-683b-4c8e-9e68-2bee21c1b997)
 
-There were zero (0) failed logons for the 'labuser' account, indicating that a brute force attempt for this account didn't take place, and a 1-time password guess is unlikely.
+- All successful login IP addresses for the 'labuser' account were reviewed for anomalies or unusual geolocations. No suspicious or unexpected activity was identified — all logins originated from expected locations.
 
-```kql
-DeviceLogonEvents
-| where DeviceName == "windows-target-1"
-| where LogonType == "Network"
-| where ActionType == "LogonFailed"
-| where AccountName == "labuser"
-| summarize count()
-```
+![image](https://github.com/user-attachments/assets/09eb8e75-974e-441e-b1f4-3f60e1867b91)
 
----
+Although the device was exposed to the internet and clear brute-force attempts were observed, there is no indication of a successful compromise or unauthorized access using the legitimate 'labuser' account.
 
-We checked all of the successful login IP addresses for the 'labuser' account to see if any of them were unusual or from an unexpected location. All were normal.
+The following table outlines relevant TTPs and detection artifacts for quick reference:
 
-```kql
-DeviceLogonEvents
-| where DeviceName == "windows-target-1"
-| where LogonType == "Network"
-| where ActionType == "LogonSuccess"
-| where AccountName == "labuser"
-| summarize LoginCount = count() by DeviceName, ActionType, AccountName, RemoteIP
-```
-
-![Successful Logins](https://github.com/user-attachments/assets/15512ee9-41d7-4fc2-8f5b-abae6948ff04)
-
----
-
-Though the device was exposed to the internet and clear brute force attempts have taken place, there is no evidence of any brute force success or unauthorized access from the legitimate account 'labuser'.
-
-Here's how the relevant TTPs and detection elements can be organized into a chart for easy reference:
-
----
-
-# 🛡️ MITRE ATT&CK TTPs for Incident Detection
+## 🛡️ MITRE ATT&CK TTPs for Incident Detection
 
 | **TTP ID** | **TTP Name**                     | **Description**                                                                                          | **Detection Relevance**                                                         |
 |------------|-----------------------------------|----------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------|
@@ -134,26 +70,16 @@ Here's how the relevant TTPs and detection elements can be organized into a char
 | T1213      | Data from Information Repositories| Device exposed publicly, indicating potential reconnaissance activities.                                  | Exposes possible adversary reconnaissance when a device is publicly accessible.  |
 | T1078      | Valid Accounts                    | Successful logins from the legitimate account ('labuser') were normal and monitored.                      | Monitors legitimate access and excludes unauthorized access attempts.           |
 
----
+The table below outlines the relevant MITRE ATT&CK techniques (TTPs) observed in this incident, highlighting their role in the detection and investigation process.
 
-This chart clearly organizes the MITRE ATT&CK techniques (TTPs) used in this incident, detailing their relevance to the detection process.
-
-**📝 Response:**  
-- Did a Audit, Malware Scan, Vulnerability Management Scan, Hardened the NSG attached to windows-target-1 to allow only RDP traffic from specific endpoints (no public internet access), Implemented account lockout policy, Implemented MFA, awaiting further instructions.
-
----
-
-## Steps to Reproduce:
-1. Provision a virtual machine with a public IP address.
-2. Ensure the device is actively communicating or available on the internet. (Test ping, etc.)
-3. Onboard the device to Microsoft Defender for Endpoint.
-4. Verify the relevant logs (e.g., network traffic logs, exposure alerts) are being collected in MDE.
-5. Execute the KQL query in the MDE advanced hunting to confirm detection.
+## Response Actions Taken:
+- Conducted a full audit, malware scan, and vulnerability assessment
+- Hardened the NSG on windows-target-1 to restrict RDP access to approved IPs only (no public exposure)
+- Enforced account lockout policies and enabled MFA
+- Awaiting further instructions for follow-up remediation or closure
 
 ---
 
-## Supplemental:
-- **More on "Shared Services" in the context of PCI DSS**: [PCI DSS Scoping and Segmentation](https://www.pcisecuritystandards.org%2Fdocuments%2FGuidance-PCI-DSS-Scoping-and-Segmentation_v1.pdf)
 
 
 
