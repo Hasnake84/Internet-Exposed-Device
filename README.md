@@ -55,7 +55,7 @@ DeviceLogonEvents
 
 Although the device was exposed to the internet and clear brute-force attempts were observed, there is no indication of a successful compromise or unauthorized access using the legitimate 'labuser' account.
 
-The following table outlines relevant TTPs and detection artifacts for quick reference:
+The table below outlines the relevant MITRE ATT&CK techniques (TTPs) observed in this incident, highlighting their role in the detection and investigation process.
 
 ## 🛡️ MITRE ATT&CK TTPs for Incident Detection
 
@@ -69,8 +69,6 @@ The following table outlines relevant TTPs and detection artifacts for quick ref
 | T1070      | Indicator Removal on Host         | No indicators of success in the attempted brute-force attacks, showing system defenses were effective.     | Confirms the lack of successful attacks due to effective defense measures.      |
 | T1213      | Data from Information Repositories| Device exposed publicly, indicating potential reconnaissance activities.                                  | Exposes possible adversary reconnaissance when a device is publicly accessible.  |
 | T1078      | Valid Accounts                    | Successful logins from the legitimate account ('labuser') were normal and monitored.                      | Monitors legitimate access and excludes unauthorized access attempts.           |
-
-The table below outlines the relevant MITRE ATT&CK techniques (TTPs) observed in this incident, highlighting their role in the detection and investigation process.
 
 ## Response Actions Taken:
 - Conducted a full audit, malware scan, and vulnerability assessment
